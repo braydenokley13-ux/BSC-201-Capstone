@@ -18100,3 +18100,172 @@ function closeOwnerMeetingAndContinue() {
     </script>
 </body>
 </html>
+<script>
+/* ============================================================
+   TRACK 201 — SAFE UPGRADE LAYER (NON-DESTRUCTIVE)
+   Built to preserve all existing button behavior
+   ============================================================ */
+
+(function () {
+  /* -----------------------------
+     CORE RUN STATE
+  ----------------------------- */
+  const STORAGE_KEY = "BOW_FRONT_OFFICE_RUN";
+
+  const defaultRun = () => ({
+    runId: crypto.randomUUID(),
+    franchise: null,
+    cycle: 1,
+    ownershipPressure: 50, // 0–100
+    pressureHistory: [],
+    decisions: [],
+    press: {},
+    mentorCalls: 0,
+    completedRooms: {},
+    completedCycles: [],
+    finalGrade: null,
+    startedAt: Date.now(),
+    lastSaved: Date.now()
+  });
+
+  let run = loadRun();
+
+  function loadRun() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : defaultRun();
+    } catch {
+      return defaultRun();
+    }
+  }
+
+  function saveRun() {
+    run.lastSaved = Date.now();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(run));
+  }
+
+  /* -----------------------------
+     SAFE FUNCTION WRAPPER
+     (does not break originals)
+  ----------------------------- */
+  function wrap(fnName, after) {
+    if (typeof window[fnName] !== "function") return;
+    const original = window[fnName];
+    window[fnName] = function (...args) {
+      const result = original.apply(this, args);
+      try { after.apply(this, args); } catch {}
+      saveRun();
+      return result;
+    };
+  }
+
+  /* -----------------------------
+     FRANCHISE SELECTION
+  ----------------------------- */
+  wrap("selectFranchise", function (key) {
+    run.franchise = key;
+  });
+
+  /* -----------------------------
+     DECISION TRACKING
+  ----------------------------- */
+  wrap("confirmDecision", function (room, option) {
+    run.decisions.push({
+      cycle: run.cycle,
+      room,
+      option,
+      timestamp: Date.now()
+    });
+
+    run.completedRooms[`${run.cycle}-${room}`] = true;
+
+    // ownership pressure impact (simple, deterministic)
+    const pressureDelta = option === "A" ? -5 : option === "D" ? +8 : +2;
+    run.ownershipPressure = Math.max(
+      0,
+      Math.min(100, run.ownershipPressure + pressureDelta)
+    );
+  });
+
+  /* -----------------------------
+     PRESS CONFERENCE (PERSISTENT)
+  ----------------------------- */
+  wrap("submitPress", function (answers) {
+    if (!run.press[run.cycle]) {
+      run.press[run.cycle] = answers;
+      run.ownershipPressure += 3;
+    }
+  });
+
+  wrap("openPress", function () {
+    const existing = run.press[run.cycle];
+    if (existing && window.showPressTranscript) {
+      window.showPressTranscript(existing);
+    }
+  });
+
+  /* -----------------------------
+     CYCLE ADVANCE
+  ----------------------------- */
+  wrap("continueToCycle", function () {
+    run.pressureHistory.push({
+      cycle: run.cycle,
+      pressure: run.ownershipPressure
+    });
+
+    run.completedCycles.push(run.cycle);
+    run.cycle += 1;
+  });
+
+  /* -----------------------------
+     MENTOR CALLS (OPTIONAL)
+  ----------------------------- */
+  window.callMentor = function () {
+    run.mentorCalls += 1;
+    alert(
+      "Mentor Insight:\n\n" +
+      (run.ownershipPressure > 70
+        ? "Ownership patience is thin. You need stability."
+        : run.ownershipPressure < 30
+        ? "You have breathing room. Think long-term."
+        : "Balance risk and optics.")
+    );
+    saveRun();
+  };
+
+  /* -----------------------------
+     FINAL GRADE (END OF RUN)
+  ----------------------------- */
+  window.computeFinalGrade = function () {
+    let score = 100 - run.ownershipPressure;
+    score -= run.decisions.length < 12 ? 15 : 0;
+    run.finalGrade =
+      score >= 85 ? "A" :
+      score >= 70 ? "B" :
+      score >= 55 ? "C" : "D";
+    saveRun();
+    return run.finalGrade;
+  };
+
+  /* -----------------------------
+     TEACHER DOSSIER EXPORT
+  ----------------------------- */
+  window.exportTeacherDossier = function () {
+    computeFinalGrade();
+    const blob = new Blob(
+      [JSON.stringify(run, null, 2)],
+      { type: "application/json" }
+    );
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "BOW_Track201_Teacher_Dossier.json";
+    a.click();
+  };
+
+  /* -----------------------------
+     AUTO-SAVE SAFETY NET
+  ----------------------------- */
+  setInterval(saveRun, 5000);
+
+})();
+</script>
