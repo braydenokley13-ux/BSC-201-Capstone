@@ -18105,6 +18105,50 @@ document.body.insertAdjacentHTML(
   '<div style="position:fixed;top:10px;right:10px;z-index:999999;background:#f5a623;color:#000;padding:8px 10px;border-radius:8px;font-weight:700;">UPGRADE LOADED</div>'
 );
 </script>
+<script>
+/* ============================================================
+   FAILSAFE BINDER — makes Intro buttons work even if
+   the main DOMContentLoaded handler crashes.
+   Paste ABOVE </body>.
+   ============================================================ */
+(function () {
+  function bindIntroButtons() {
+    const startBtn = document.getElementById("btn-start");
+    const howBtn = document.getElementById("btn-how-it-works");
+
+    // If your main script bound these already, do nothing.
+    // (Safari doesn't expose listener presence, so we guard with a flag.)
+    if (startBtn && !startBtn.__bowBound) {
+      startBtn.__bowBound = true;
+      startBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (typeof window.showScreen === "function") window.showScreen("franchise");
+        else console.error("showScreen() is not defined (main script did not load).");
+      }, { passive: false });
+    }
+
+    if (howBtn && !howBtn.__bowBound) {
+      howBtn.__bowBound = true;
+      howBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        if (typeof window.showModal === "function") window.showModal("how");
+        else console.error("showModal() is not defined (main script did not load).");
+      }, { passive: false });
+    }
+  }
+
+  // Bind now + after DOM ready (covers both cases).
+  bindIntroButtons();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindIntroButtons);
+  }
+
+  // Show you errors immediately (so we can stop guessing).
+  window.addEventListener("error", function (ev) {
+    console.error("JS ERROR:", ev.message, ev.filename, ev.lineno);
+  });
+})();
+</script>
 
 </body>
 </html>
